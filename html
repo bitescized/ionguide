@@ -1,0 +1,3078 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Ionization Energy Simulation</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Poppins", sans-serif;
+        background-color: white;
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      .main-content {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+
+      .guided-slideshow {
+        flex: 1 1 450px;
+        min-width: 400px;
+        border: 2px solid #2360a1;
+        border-radius: 10px;
+        padding: 20px;
+        background-color: rgba(233, 244, 255, 0.6);
+      }
+
+      .simulation-section {
+        flex: 1 1 550px;
+        min-width: 500px;
+        border: 2px solid #28a745;
+        border-radius: 10px;
+        padding: 20px;
+        background-color: #f8fff8;
+      }
+
+      /* Periodic Table Styles */
+      .periodic-table-container {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+        margin-bottom: 15px;
+        overflow: auto;
+        position: relative;
+      }
+
+      .periodic-table {
+        display: grid;
+        grid-template-columns: repeat(18, 1fr);
+        gap: 2px;
+        max-width: 500px;
+        margin: 0 auto;
+        background-color: #f5f5f5;
+        padding: 6px;
+        border-radius: 6px;
+      }
+
+      .element-cell {
+        aspect-ratio: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: white;
+        border: 1px solid transparent;
+        border-radius: 2px;
+        transition: all 0.3s ease;
+        font-size: 7px;
+        padding: 1px;
+        min-height: 25px;
+        position: relative;
+      }
+
+      .element-cell.selectable {
+        cursor: pointer;
+        background-color: #fffbf0;
+        border-color: #ffd700;
+      }
+
+      .element-cell.selectable:hover {
+        transform: scale(1.4);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 100;
+        background-color: #fff8dc;
+        border-color: #ffa500;
+        border-width: 2px;
+      }
+
+      .element-cell.selected {
+        background-color: #ffeb3b;
+        border-color: #f57f17;
+        border-width: 2px;
+        font-weight: bold;
+      }
+
+      .element-cell.unavailable {
+        background-color: #e9ecef;
+        border-color: #ced4da;
+        color: #6c757d;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .element-symbol {
+        font-weight: bold;
+        font-size: 8px;
+        margin-bottom: 1px;
+      }
+
+      .element-name {
+        font-size: 5px;
+        text-align: center;
+        line-height: 1;
+        display: none;
+      }
+
+      .element-cell:hover .element-name {
+        display: block;
+        font-size: 6px;
+      }
+
+      .element-number {
+        font-size: 5px;
+        color: #666;
+        margin-bottom: 1px;
+      }
+
+      .element-cell:hover .element-number {
+        font-size: 6px;
+      }
+
+      .element-cell:hover .element-symbol {
+        font-size: 10px;
+      }
+
+      .empty-cell {
+        background-color: #f0f0f0;
+        border-color: #e0e0e0;
+      }
+
+      .placeholder-cell {
+        background-color: #f8f8f8;
+        border-color: #e8e8e8;
+        opacity: 0.5;
+      }
+
+      /* Video popup styles */
+      .video-popup {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .video-popup-content {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        max-width: 80%;
+        max-height: 80%;
+        position: relative;
+      }
+
+      .video-popup-close {
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        background: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      @media (max-width: 1200px) {
+        .main-content {
+          flex-direction: column !important;
+        }
+
+        .guided-slideshow {
+          min-width: auto !important;
+        }
+
+        .simulation-section {
+          min-width: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+
+      function App() {
+        // State for the simulation
+        const [selectedElement, setSelectedElement] = useState(null);
+        const [activeDragIndex, setActiveDragIndex] = useState(null);
+        const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+        const [dragStartPosition, setDragStartPosition] = useState({
+          x: 0,
+          y: 0,
+        });
+        const [completedIonizations, setCompletedIonizations] = useState([]);
+        const [ionizationDetails, setIonizationDetails] = useState([]);
+        const [energyValue, setEnergyValue] = useState(0);
+        const [maxEnergy, setMaxEnergy] = useState(3000);
+        const [isDragging, setIsDragging] = useState(false);
+        const [resetKey, setResetKey] = useState(0);
+        const [electrons, setElectrons] = useState([]);
+        const [allowInnerShellRemoval, setAllowInnerShellRemoval] =
+          useState(true);
+        const [shellElectronCounts, setShellElectronCounts] = useState({});
+        const [currentDraggedShell, setCurrentDraggedShell] = useState(null);
+
+        // Guided mode state
+        const [currentSlide, setCurrentSlide] = useState(0);
+        const [slideAnswers, setSlideAnswers] = useState({});
+        const [attemptCounts, setAttemptCounts] = useState({});
+        const [showCorrectAnswers, setShowCorrectAnswers] = useState({});
+        const [videoVisible, setVideoVisible] = useState({});
+        const [submittedQuestions, setSubmittedQuestions] = useState({});
+        const [videoPopup, setVideoPopup] = useState(null);
+
+        // Canvas ref for electron animation
+        const canvasRef = useRef(null);
+        const animationFrameRef = useRef(null);
+
+        // Guided mode slide data
+        const slides = [
+          {
+            id: 0,
+            title: "Understanding Ionization Energy",
+            content:
+              "To understand why sodium atoms have a tendency to become ions, we need to look at the energy needed for this electron to be removed. This is known as *ionization energy*.",
+
+            questions: [
+              {
+                id: "slide0_q1",
+                text: "Q1. Using the interactive and the data from it, make a *claim* about why sodium's *valence electron (outermost electron)* is removed (compared to its other electrons).",
+                type: "open",
+                keywords: [
+                  "furthest",
+                  "far",
+                  "less attraction",
+                  "nuclear attraction",
+                  "distance",
+                ],
+                correctAnswer:
+                  "The valence electron is furthest from the nucleus and experiences less nuclear attraction, making it easier to remove.",
+              },
+              {
+                id: "slide0_q2",
+                text: "Q2. What happens when a sodium atom loses an electron?",
+                type: "multiple_choice",
+                choices: [
+                  "1) It becomes a neutral atom",
+                  "2) It becomes a positive ion",
+                  "3) It becomes a negative ion",
+                ],
+                correctChoice: 2,
+              },
+              {
+                id: "slide0_q3",
+                text: "Q3. Explain why:",
+                type: "open",
+                keywords: ["positive", "charge", "proton", "electron"],
+                correctAnswer:
+                  "When an atom loses an electron, it has more protons than electrons, giving it a positive charge and making it a positive ion.",
+              },
+            ],
+          },
+          {
+            id: 1,
+            title: "Comparing Ionization Energies",
+            content:
+              "Different atoms have different ionization energies. This can be influenced by the size of the atom, the charge of the nucleus, and how electrons are arranged around the nucleus.",
+            questions: [
+              {
+                id: "slide1_q1",
+                text: "Q4. Using the interactive, identify the *trend* by filling the blank: The lower the ionization energy, the ____ energy required for the electron to be removed.",
+                type: "fill",
+                keywords: ["less", "lower"],
+                requiredWord: "energy",
+                correctAnswer:
+                  "Valence electrons require less energy to be removed as they are further away from the nucleus.",
+              },
+              {
+                id: "slide1_q2a",
+                text: "Q5. Compare *sodium's ionization energy* to the other elements in the *same row (period 3)* (Mg, Al, Cl, Ar). What do you notice?",
+                type: "open",
+                keywords: ["lower", "smaller", "less"],
+                correctAnswer:
+                  "Sodium's ionization energy is lower than other elements in the same period (row).",
+              },
+              {
+                id: "slide1_q2b",
+                text: "Q6. Look at the ionization energy of all elements in the *first column (Group 1)*  (Li, Na, K, Rb). What do you notice as you move down Group 1?",
+                type: "open",
+                keywords: ["increases", "gets larger", "gets bigger"],
+                correctAnswer:
+                  "Ionization energy increases as you go down the group.",
+              },
+            ],
+          },
+          {
+            id: 2,
+            title: "Predicting Reactions with Water",
+            content:
+              "Use the interactive to make predictions about how other elements will interact with water.",
+            questions: [
+              {
+                id: "slide3_q1",
+                text: "Q7. Based on its *ionization energy* and what you saw with sodium, how do you think *pure potassium metal* interacts with water and WHY?",
+                type: "open",
+                keywords: ["react", "energy", "vigorous", "explosive"],
+                correctAnswer:
+                  "Potassium will react vigorously with water because it has low ionization energy, making it highly reactive.",
+                hasVideo: true,
+                videoId: "slide3_q1_video",
+                videoUrl:
+                  "https://www.youtube.com/embed/NxmWYZ_YZAA?si=oOByveHFvC0s2zq2&mute=1",
+                videoTitle: "Potassium reacting with water",
+              },
+              {
+                id: "slide3_q2",
+                text: "Q8. Based on their *ionization energy* and what you saw with sodium and potassium, predict how *rubidium* and *cesium* will interact with water and explain WHY?",
+                type: "open",
+                keywords: ["react", "energy", "violent", "explosive", "more"],
+                correctAnswer:
+                  "Rubidium and cesium will react even more violently with water because they have even lower ionization energies than potassium.",
+                hasVideo: true,
+                videoId: "slide3_q2_video",
+                videoUrl:
+                  "https://www.youtube.com/embed/-p2kpZRWxM8?si=NjfMYeR9thLgKxTd",
+                videoTitle: "Rubidium and Cesium reacting with water",
+              },
+            ],
+          },
+          {
+            id: 3,
+            title: "Alkali Metals Group",
+            content:
+              "These elements- sodium, potassium, rubidium, and caesium- are part of a group: *alkali metals*. This group of elements shares similar properties.",
+            properties: [
+              "High reactivity",
+              "Only found in nature as compounds (not on their own)",
+              "Low ionization energy",
+            ],
+            questions: [
+              {
+                id: "slide4_q1",
+                text: "Q9: Locate each element. What do you notice about where they are in the periodic table?",
+                type: "open",
+                keywords: [
+                  "group 1",
+                  "first column",
+                  "first group",
+                  "same group",
+                ],
+                correctAnswer:
+                  "They all belong to Group 1 (the first column in the periodic table).",
+              },
+              {
+                id: "slide4_q2",
+                text: "Q10: These elements also have similar *atomic structures*. What is similar about them?",
+                type: "open",
+                keywords: [
+                  "same number of valence electrons",
+                  "1 valence electron",
+                  "1 electron in outershell",
+                ],
+                correctAnswer: "They all have 1 valence electron.",
+                hasHyperlink: true,
+              },
+            ],
+            infoBox: {
+              title: "So how do we isolate these metals?",
+              content:
+                "Pure sodium was first isolated in 1807. It was done through electrolysis- applying an electrical current to a compound containing sodium (sodium hydroxide, or NaOH). Pure sodium is now produced through the electrolysis of sodium chloride.",
+            },
+          },
+        ];
+
+        // Enhanced element data
+        const elements = {
+          H: {
+            name: "Hydrogen",
+            atomicNumber: 1,
+            color: "#C0C0C0",
+            shellConfiguration: [1],
+            shellIonizationEnergies: {
+              0: [1312],
+            },
+            sequentialIonizationEnergies: [1312],
+            position: { period: 1, group: 1 },
+          },
+          He: {
+            name: "Helium",
+            atomicNumber: 2,
+            color: "#D9FFFF",
+            shellConfiguration: [2],
+            shellIonizationEnergies: {
+              0: [2372, 5250],
+            },
+            sequentialIonizationEnergies: [2372, 5250],
+            position: { period: 1, group: 18 },
+          },
+          Li: {
+            name: "Lithium",
+            atomicNumber: 3,
+            color: "#900C3F",
+            shellConfiguration: [2, 1],
+            shellIonizationEnergies: {
+              0: [7298, 11815],
+              1: [520],
+            },
+            sequentialIonizationEnergies: [520, 7298, 11815],
+            position: { period: 2, group: 1 },
+          },
+          Be: {
+            name: "Beryllium",
+            atomicNumber: 4,
+            color: "#C70039",
+            shellConfiguration: [2, 2],
+            shellIonizationEnergies: {
+              0: [14848, 21006],
+              1: [899, 1757],
+            },
+            sequentialIonizationEnergies: [899, 1757, 14848, 21006],
+            position: { period: 2, group: 2 },
+          },
+          B: {
+            name: "Boron",
+            atomicNumber: 5,
+            color: "#FFB5C5",
+            shellConfiguration: [2, 3],
+            shellIonizationEnergies: {
+              0: [24385, 32826],
+              1: [801, 2427, 3660],
+            },
+            sequentialIonizationEnergies: [801, 2427, 3660, 24385, 32826],
+            position: { period: 2, group: 13 },
+          },
+          C: {
+            name: "Carbon",
+            atomicNumber: 6,
+            color: "#909090",
+            shellConfiguration: [2, 4],
+            shellIonizationEnergies: {
+              0: [37830, 47261],
+              1: [1086, 2353, 4621, 6223],
+            },
+            sequentialIonizationEnergies: [
+              1086, 2353, 4621, 6223, 37830, 47261,
+            ],
+            position: { period: 2, group: 14 },
+          },
+          N: {
+            name: "Nitrogen",
+            atomicNumber: 7,
+            color: "#3050F8",
+            shellConfiguration: [2, 5],
+            shellIonizationEnergies: {
+              0: [54400, 66850],
+              1: [1402, 2856, 4578, 7475, 9445],
+            },
+            sequentialIonizationEnergies: [
+              1402, 2856, 4578, 7475, 9445, 54400, 66850,
+            ],
+            position: { period: 2, group: 15 },
+          },
+          O: {
+            name: "Oxygen",
+            atomicNumber: 8,
+            color: "#FF0000",
+            shellConfiguration: [2, 6],
+            shellIonizationEnergies: {
+              0: [32826, 47261],
+              1: [1314, 3388, 5301, 7469, 10990, 13326],
+            },
+            sequentialIonizationEnergies: [
+              1314, 3388, 5301, 7469, 10990, 13326, 32826, 47261,
+            ],
+            position: { period: 2, group: 16 },
+          },
+          F: {
+            name: "Fluorine",
+            atomicNumber: 9,
+            color: "#90E050",
+            shellConfiguration: [2, 7],
+            shellIonizationEnergies: {
+              0: [37830, 53780],
+              1: [1681, 3374, 6050, 8408, 11023, 15164, 17868],
+            },
+            sequentialIonizationEnergies: [
+              1681, 3374, 6050, 8408, 11023, 15164, 17868, 37830, 53780,
+            ],
+            position: { period: 2, group: 17 },
+          },
+          Ne: {
+            name: "Neon",
+            atomicNumber: 10,
+            color: "#B3E3F5",
+            shellConfiguration: [2, 8],
+            shellIonizationEnergies: {
+              0: [44400, 63500],
+              1: [2081, 3952, 6122, 9371, 12177, 15238, 19999, 23069],
+            },
+            sequentialIonizationEnergies: [
+              2081, 3952, 6122, 9371, 12177, 15238, 19999, 23069, 44400, 63500,
+            ],
+            position: { period: 2, group: 18 },
+          },
+          Na: {
+            name: "Sodium",
+            atomicNumber: 11,
+            color: "#FFC300",
+            shellConfiguration: [2, 8, 1],
+            shellIonizationEnergies: {
+              0: [141362, 159075],
+              1: [13354, 16613, 20117, 25496, 28932],
+              2: [496],
+            },
+            sequentialIonizationEnergies: [
+              496, 4562, 6910, 9543, 13354, 16613, 20117, 25496, 28932, 141362,
+              159075,
+            ],
+            position: { period: 3, group: 1 },
+          },
+          K: {
+            name: "Potassium",
+            atomicNumber: 19,
+            color: "#8F40D4",
+            shellConfiguration: [2, 8, 8, 1],
+            shellIonizationEnergies: {
+              0: [354600, 387600],
+              1: [37700, 44900, 53500, 62300, 72100, 82700, 96300, 106800],
+              2: [4610, 6300, 8400, 11200, 14700, 18800, 23300, 27700],
+              3: [419],
+            },
+            sequentialIonizationEnergies: [
+              419, 3052, 4420, 5877, 7975, 9590, 11343, 14944, 16963, 48610,
+              54490, 60730, 68950, 75900, 83800, 93400, 99710, 444900,
+            ],
+            position: { period: 4, group: 1 },
+          },
+          Rb: {
+            name: "Rubidium",
+            atomicNumber: 37,
+            color: "#702EB0",
+            shellConfiguration: [2, 8, 18, 8, 1],
+            shellIonizationEnergies: {
+              4: [403],
+            },
+            sequentialIonizationEnergies: [403],
+            position: { period: 5, group: 1 },
+          },
+          Mg: {
+            name: "Magnesium",
+            atomicNumber: 12,
+            color: "#FF5733",
+            shellConfiguration: [2, 8, 2],
+            shellIonizationEnergies: {
+              0: [169988, 189368],
+              1: [13630, 17995, 21703, 25661, 31653, 35458],
+              2: [738, 1451],
+            },
+            sequentialIonizationEnergies: [
+              738, 1451, 7733, 10540, 13630, 17995, 21703, 25661, 31653, 35458,
+              169988, 189368,
+            ],
+            position: { period: 3, group: 2 },
+          },
+          Al: {
+            name: "Aluminum",
+            atomicNumber: 13,
+            color: "#BFA6A6",
+            shellConfiguration: [2, 8, 3],
+            shellIonizationEnergies: {
+              0: [198310, 224950],
+              1: [18828, 23780, 28790, 33900, 39610, 47100, 56290, 63500],
+              2: [578, 1817, 2745],
+            },
+            sequentialIonizationEnergies: [
+              578, 1817, 2745, 11580, 14830, 18380, 23330, 27460, 31850, 38470,
+              42640, 201400, 222300,
+            ],
+            position: { period: 3, group: 13 },
+          },
+          Si: {
+            name: "Silicon",
+            atomicNumber: 14,
+            color: "#F0C814",
+            shellConfiguration: [2, 8, 4],
+            shellIonizationEnergies: {
+              0: [230664, 257632],
+              1: [21267, 26312, 31828, 38496, 45962, 54210, 64360, 75252],
+              2: [786, 1577, 3232, 4356],
+            },
+            sequentialIonizationEnergies: [
+              786, 1577, 3232, 4356, 16091, 19805, 23786, 29287, 33878, 38726,
+              45962, 51190, 65018, 81362,
+            ],
+            position: { period: 3, group: 14 },
+          },
+          P: {
+            name: "Phosphorus",
+            atomicNumber: 15,
+            color: "#FF8000",
+            shellConfiguration: [2, 8, 5],
+            shellIonizationEnergies: {
+              0: [263458, 291995],
+              1: [23780, 29566, 35868, 43961, 51444, 62230, 74830, 88678],
+              2: [1012, 1907, 2914, 4964, 6274],
+            },
+            sequentialIonizationEnergies: [
+              1012, 1907, 2914, 4964, 6274, 21267, 25397, 29872, 35905, 40950,
+              46261, 54110, 57296, 71655, 84078,
+            ],
+            position: { period: 3, group: 15 },
+          },
+          S: {
+            name: "Sulfur",
+            atomicNumber: 16,
+            color: "#FFFF30",
+            shellConfiguration: [2, 8, 6],
+            shellIonizationEnergies: {
+              0: [32826, 47261],
+              1: [2252, 2673, 3361, 4564, 7013, 8496, 27107, 31669],
+              2: [1000, 2252, 3357, 4556, 7004, 8495],
+            },
+            sequentialIonizationEnergies: [
+              1000, 2252, 3357, 4556, 7004, 8495, 27107, 31669, 72594, 88049,
+              108100, 128558, 164934, 200000, 230766, 284766,
+            ],
+            position: { period: 3, group: 16 },
+          },
+          Cl: {
+            name: "Chlorine",
+            atomicNumber: 17,
+            color: "#1FF01F",
+            shellConfiguration: [2, 8, 7],
+            shellIonizationEnergies: {
+              0: [299010, 329950],
+              1: [31930, 38430, 45850, 54100, 62700, 72450, 88750, 97920],
+              2: [1251, 2298, 3822, 5158, 6542, 9362, 11018],
+            },
+            sequentialIonizationEnergies: [
+              1251, 2298, 3822, 5158, 6542, 9362, 11018, 23810, 29900, 36000,
+              43200, 51400, 60400, 70400, 81800, 93400, 352000,
+            ],
+            position: { period: 3, group: 17 },
+          },
+          Ar: {
+            name: "Argon",
+            atomicNumber: 18,
+            color: "#80D1E3",
+            shellConfiguration: [2, 8, 8],
+            shellIonizationEnergies: {
+              0: [326300, 358200],
+              1: [34800, 41600, 49600, 58400, 67600, 77800, 91000, 100800],
+              2: [1520, 2666, 3931, 5771, 7238, 8781, 11995, 13842],
+            },
+            sequentialIonizationEnergies: [
+              1520, 2666, 3931, 5771, 7238, 8781, 11995, 13842, 40760, 46190,
+              52500, 59400, 71700, 75000, 88600, 103400, 111700, 386200,
+            ],
+            position: { period: 3, group: 18 },
+          },
+          Ca: {
+            name: "Calcium",
+            atomicNumber: 20,
+            color: "#3DFF00",
+            shellConfiguration: [2, 8, 8, 2],
+            shellIonizationEnergies: {
+              0: [384400, 418300],
+              1: [40800, 48500, 57600, 67000, 77200, 88400, 102000, 113000],
+              2: [5470, 7200, 9500, 12300, 15900, 20100, 24800, 29700],
+              3: [590, 1145],
+            },
+            sequentialIonizationEnergies: [
+              590, 1145, 4912, 6474, 8144, 10496, 12270, 14206, 18191, 20385,
+              57110, 63410, 70110, 78890, 86310, 94700, 104900, 111711, 494850,
+            ],
+            position: { period: 4, group: 2 },
+          },
+        };
+
+        // Create periodic table
+        const createPeriodicTable = () => {
+          const table = [];
+
+          // Define which positions should have elements in a standard periodic table
+          const elementPositions = new Set([
+            "1-1",
+            "1-18", // H, He
+            "2-1",
+            "2-2",
+            "2-13",
+            "2-14",
+            "2-15",
+            "2-16",
+            "2-17",
+            "2-18", // Li-Ne
+            "3-1",
+            "3-2",
+            "3-13",
+            "3-14",
+            "3-15",
+            "3-16",
+            "3-17",
+            "3-18", // Na-Ar
+            "4-1",
+            "4-2",
+            "4-3",
+            "4-4",
+            "4-5",
+            "4-6",
+            "4-7",
+            "4-8",
+            "4-9",
+            "4-10",
+            "4-11",
+            "4-12",
+            "4-13",
+            "4-14",
+            "4-15",
+            "4-16",
+            "4-17",
+            "4-18", // K-Kr
+            "5-1",
+            "5-2",
+            "5-3",
+            "5-4",
+            "5-5",
+            "5-6",
+            "5-7",
+            "5-8",
+            "5-9",
+            "5-10",
+            "5-11",
+            "5-12",
+            "5-13",
+            "5-14",
+            "5-15",
+            "5-16",
+            "5-17",
+            "5-18", // Rb-Xe
+          ]);
+
+          // Create a 6x18 grid for the periodic table
+          for (let period = 1; period <= 6; period++) {
+            for (let group = 1; group <= 18; group++) {
+              const positionKey = `${period}-${group}`;
+
+              // Find element for this position
+              const element = Object.keys(elements).find(
+                (el) =>
+                  elements[el].position.period === period &&
+                  elements[el].position.group === group
+              );
+
+              if (element) {
+                // We have data for this element
+                const isSelected = selectedElement === element;
+
+                let cellClass = "element-cell selectable";
+                if (isSelected) cellClass += " selected";
+
+                let cellStyle = {};
+
+                table.push(
+                  React.createElement(
+                    "div",
+                    {
+                      key: element,
+                      className: cellClass,
+                      style: cellStyle,
+                      onClick: () => handleElementSelect(element),
+                      title: elements[element].name,
+                    },
+                    [
+                      React.createElement(
+                        "div",
+                        { key: "number", className: "element-number" },
+                        elements[element].atomicNumber
+                      ),
+                      React.createElement(
+                        "div",
+                        { key: "symbol", className: "element-symbol" },
+                        element
+                      ),
+                      React.createElement(
+                        "div",
+                        { key: "name", className: "element-name" },
+                        elements[element].name
+                      ),
+                    ]
+                  )
+                );
+              } else if (elementPositions.has(positionKey)) {
+                // This position should have an element, but we don't have data for it
+                table.push(
+                  React.createElement(
+                    "div",
+                    {
+                      key: positionKey,
+                      className: "element-cell placeholder-cell",
+                      title:
+                        "Element position (not available in this simulation)",
+                    },
+                    React.createElement(
+                      "div",
+                      { className: "element-symbol" },
+                      "•"
+                    )
+                  )
+                );
+              } else {
+                // Empty space in the periodic table
+                table.push(
+                  React.createElement("div", {
+                    key: positionKey,
+                    className: "element-cell empty-cell",
+                  })
+                );
+              }
+            }
+          }
+
+          return table;
+        };
+
+        // Guided mode functions
+        const checkAnswer = (questionId, userAnswer) => {
+          const question = slides
+            .find((slide) => slide.questions?.some((q) => q.id === questionId))
+            ?.questions.find((q) => q.id === questionId);
+
+          if (!question) return false;
+
+          // Handle multiple choice questions
+          if (question.type === "multiple_choice") {
+            const selectedChoice = parseInt(userAnswer);
+            return selectedChoice === question.correctChoice;
+          }
+
+          if (question.type === "open" && !question.keywords) {
+            return true;
+          }
+
+          if (question.keywords) {
+            const lowerAnswer = userAnswer.toLowerCase();
+
+            // Special case for questions with requiredWord (like Q2)
+            if (question.requiredWord) {
+              const hasKeyword = question.keywords.some((keyword) =>
+                lowerAnswer.includes(keyword.toLowerCase())
+              );
+              const hasRequiredWord = lowerAnswer.includes(
+                question.requiredWord.toLowerCase()
+              );
+              return hasKeyword && hasRequiredWord;
+            }
+
+            // Regular keyword checking for other questions
+            return question.keywords.some((keyword) =>
+              lowerAnswer.includes(keyword.toLowerCase())
+            );
+          }
+
+          return false;
+        };
+
+        const handleAnswerSubmit = (questionId) => {
+          const userAnswer = slideAnswers[questionId] || "";
+          const currentAttempts = attemptCounts[questionId] || 0;
+
+          // Mark question as submitted
+          setSubmittedQuestions((prev) => ({
+            ...prev,
+            [questionId]: true,
+          }));
+
+          const question = slides
+            .find((slide) => slide.questions?.some((q) => q.id === questionId))
+            ?.questions.find((q) => q.id === questionId);
+
+          if (checkAnswer(questionId, userAnswer)) {
+            setAttemptCounts((prev) => ({ ...prev, [questionId]: 0 }));
+
+            // Show video popup for correct answers
+            if (question?.hasVideo) {
+              setVideoPopup({
+                url: question.videoUrl,
+                title: question.videoTitle,
+              });
+            }
+          } else {
+            const newAttempts = currentAttempts + 1;
+            setAttemptCounts((prev) => ({
+              ...prev,
+              [questionId]: newAttempts,
+            }));
+
+            if (newAttempts >= 2) {
+              setShowCorrectAnswers((prev) => ({
+                ...prev,
+                [questionId]: true,
+              }));
+
+              // Show video popup after 2 attempts for video questions
+              if (question?.hasVideo) {
+                setVideoPopup({
+                  url: question.videoUrl,
+                  title: question.videoTitle,
+                });
+              }
+            }
+          }
+        };
+
+        const getQuestionFeedback = (questionId) => {
+          const attempts = attemptCounts[questionId] || 0;
+          const showCorrect = showCorrectAnswers[questionId];
+          const userAnswer = slideAnswers[questionId] || "";
+          const isCorrect = checkAnswer(questionId, userAnswer);
+
+          const question = slides
+            .find((slide) => slide.questions?.some((q) => q.id === questionId))
+            ?.questions.find((q) => q.id === questionId);
+
+          if (showCorrect) {
+            return { type: "correct", message: question?.correctAnswer || "" };
+          }
+
+          if (attempts === 1 && userAnswer && !isCorrect) {
+            return {
+              type: "incorrect",
+              message: "Incorrect - try one more time",
+            };
+          }
+
+          // Only show success feedback after submission (when attempts > 0)
+          if (attempts > 0 && userAnswer && isCorrect) {
+            return {
+              type: "success",
+              message: `Correct! ${question?.correctAnswer || ""}`,
+            };
+          }
+
+          return null;
+        };
+
+        const isCurrentSlideComplete = () => {
+          const currentSlideQuestions = slides[currentSlide]?.questions || [];
+          return currentSlideQuestions.every((question) => {
+            const userAnswer = slideAnswers[question.id] || "";
+            const isSubmitted = submittedQuestions[question.id];
+            return (
+              userAnswer.trim() &&
+              isSubmitted &&
+              checkAnswer(question.id, userAnswer)
+            );
+          });
+        };
+
+        const getTotalCompletedAnswers = () => {
+          let completed = 0;
+          let correct = 0;
+          let total = 0;
+
+          slides.forEach((slide) => {
+            if (slide.questions) {
+              slide.questions.forEach((question) => {
+                total++;
+                const userAnswer = slideAnswers[question.id] || "";
+                const isSubmitted = submittedQuestions[question.id];
+                const isCorrect =
+                  userAnswer.trim() &&
+                  isSubmitted &&
+                  checkAnswer(question.id, userAnswer);
+
+                if (isSubmitted || showCorrectAnswers[question.id]) {
+                  completed++;
+                }
+                if (isCorrect) {
+                  correct++;
+                }
+              });
+            }
+          });
+
+          return { completed, correct, total };
+        };
+
+        // Shell colors
+        const shellColors = {
+          "Inner Shell": ["#4caf50", "#a5d6a7"],
+          "Middle Shell": ["#7b1fa2", "#ab47bc"],
+          "Outer Shell": ["#1976d2", "#42a5f5"],
+        };
+
+        const getShellName = (shellIndex, totalShells) => {
+          if (totalShells === 1) return "Inner Shell";
+          if (totalShells === 2) {
+            return shellIndex === 0 ? "Inner Shell" : "Outer Shell";
+          }
+          if (shellIndex === 0) return "Inner Shell";
+          if (shellIndex === totalShells - 1) return "Outer Shell";
+          return "Middle Shell";
+        };
+
+        const getEnergyMeterHeight = (value) => {
+          if (value <= 0) return 0;
+          const percentage = (value / maxEnergy) * 100;
+          return Math.max(10, percentage);
+        };
+
+        const getIonizationEnergy = (shellIndex, electronIndexInShell) => {
+          if (!selectedElement) return 0;
+
+          const shellEnergies =
+            elements[selectedElement].shellIonizationEnergies;
+          const removedFromShell = ionizationDetails.filter(
+            (detail) =>
+              detail.shell === shellIndex && detail.element === selectedElement
+          ).length;
+
+          if (
+            shellEnergies[shellIndex] &&
+            shellEnergies[shellIndex][removedFromShell]
+          ) {
+            return shellEnergies[shellIndex][removedFromShell];
+          }
+
+          return (
+            Math.max(
+              ...elements[selectedElement].sequentialIonizationEnergies
+            ) * 1.2
+          );
+        };
+
+        const resetSimulation = () => {
+          setActiveDragIndex(null);
+          setDragPosition({ x: 0, y: 0 });
+          setDragStartPosition({ x: 0, y: 0 });
+          setEnergyValue(0);
+          setResetKey((prev) => prev + 1);
+          setCompletedIonizations([]);
+          setIsDragging(false);
+          setCurrentDraggedShell(null);
+
+          if (selectedElement) {
+            const newShellElectronCounts = {};
+            elements[selectedElement].shellConfiguration.forEach(
+              (count, index) => {
+                newShellElectronCounts[index] = count;
+              }
+            );
+            setShellElectronCounts(newShellElectronCounts);
+          }
+
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+          }
+        };
+
+        const handleElementSelect = (element) => {
+          setSelectedElement(element);
+          setActiveDragIndex(null);
+          setDragPosition({ x: 0, y: 0 });
+          setDragStartPosition({ x: 0, y: 0 });
+          setEnergyValue(0);
+          setCompletedIonizations([]);
+          setIsDragging(false);
+          setCurrentDraggedShell(null);
+
+          const newShellElectronCounts = {};
+          elements[element].shellConfiguration.forEach((count, index) => {
+            newShellElectronCounts[index] = count;
+          });
+          setShellElectronCounts(newShellElectronCounts);
+
+          setResetKey((prev) => prev + 1);
+
+          const allEnergies = [
+            ...ionizationDetails.map((d) => d.energy),
+            elements[element].sequentialIonizationEnergies[0],
+          ];
+          const maxEnergyFromAll = Math.max(...allEnergies);
+          setMaxEnergy(maxEnergyFromAll * 1.5);
+        };
+
+        const toggleInnerShellRemoval = () => {
+          setAllowInnerShellRemoval(!allowInnerShellRemoval);
+          resetSimulation();
+        };
+
+        const updateElectronPositions = () => {
+          if (!selectedElement) return;
+
+          const newElectrons = [];
+          const shellConfig = elements[selectedElement].shellConfiguration;
+          const centerX = 175;
+          const centerY = 175;
+
+          for (
+            let shellIndex = 0;
+            shellIndex < shellConfig.length;
+            shellIndex++
+          ) {
+            const originalElectronCount = shellConfig[shellIndex];
+            const currentElectronCount = shellElectronCounts[shellIndex] || 0;
+            const shellRadius = 40 + shellIndex * 25;
+
+            for (let i = 0; i < currentElectronCount; i++) {
+              const angle = (i / originalElectronCount) * 2 * Math.PI;
+              const x = centerX + shellRadius * Math.cos(angle);
+              const y = centerY + shellRadius * Math.sin(angle);
+
+              newElectrons.push({
+                id: `${shellIndex}-${i}`,
+                x,
+                y,
+                shellIndex,
+                electronIndex: i,
+                radius: 6,
+                energy: getIonizationEnergy(shellIndex, i),
+              });
+            }
+          }
+
+          setElectrons(newElectrons);
+        };
+
+        const handleCanvasMouseDown = (event) => {
+          if (isDragging || !selectedElement) return;
+
+          const canvas = canvasRef.current;
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = event.clientX - rect.left;
+          const mouseY = event.clientY - rect.top;
+
+          for (const electron of electrons) {
+            const dx = mouseX - electron.x;
+            const dy = mouseY - electron.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= electron.radius) {
+              startDrag(
+                electron.shellIndex,
+                electron.electronIndex,
+                electron.x,
+                electron.y,
+                electron.energy
+              );
+              break;
+            }
+          }
+        };
+
+        const startDrag = (
+          shellIndex,
+          electronIndex,
+          startX,
+          startY,
+          energy
+        ) => {
+          if (!selectedElement) return;
+
+          if (!allowInnerShellRemoval) {
+            const shellConfig = elements[selectedElement].shellConfiguration;
+            const lastShellIndex = shellConfig.length - 1;
+
+            if (
+              shellIndex !== lastShellIndex &&
+              shellElectronCounts[lastShellIndex] > 0
+            ) {
+              return;
+            }
+          }
+
+          setIsDragging(true);
+          setActiveDragIndex(`${shellIndex}-${electronIndex}`);
+          setDragStartPosition({ x: startX, y: startY });
+          setDragPosition({ x: startX, y: startY });
+
+          const totalShells =
+            elements[selectedElement].shellConfiguration.length;
+          const shellName = getShellName(shellIndex, totalShells);
+          setCurrentDraggedShell(shellName);
+
+          setEnergyValue(0);
+        };
+
+        const handleMouseMove = (event) => {
+          if (!isDragging || activeDragIndex === null || !selectedElement)
+            return;
+
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          const rect = canvas.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+
+          setDragPosition({ x, y });
+
+          const dx = x - dragStartPosition.x;
+          const dy = y - dragStartPosition.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          const [shellIndex, electronIndex] = activeDragIndex
+            .split("-")
+            .map(Number);
+          const targetEnergy = getIonizationEnergy(shellIndex, electronIndex);
+
+          const shellConfig = elements[selectedElement].shellConfiguration;
+          const totalShells = shellConfig.length;
+
+          const shellDistanceScale = 1 + (totalShells - shellIndex - 1) * 0.75;
+          const maxDistance = 100 * shellDistanceScale;
+
+          let energyLevel = 0;
+          if (distance < maxDistance) {
+            const normalizedDistance = distance / maxDistance;
+            energyLevel = targetEnergy * Math.pow(normalizedDistance, 1.5);
+          } else {
+            energyLevel = targetEnergy;
+          }
+
+          setEnergyValue(Math.min(energyLevel, targetEnergy));
+
+          const ionizationThreshold = 120 * shellDistanceScale;
+          if (distance > ionizationThreshold) {
+            completeIonization(targetEnergy);
+          }
+        };
+
+        const handleMouseUp = () => {
+          if (!isDragging || !selectedElement) return;
+
+          const [shellIndex, electronIndex] = activeDragIndex
+            .split("-")
+            .map(Number);
+          const targetEnergy = getIonizationEnergy(shellIndex, electronIndex);
+
+          if (energyValue < targetEnergy * 0.8) {
+            animateElectronReturn();
+          } else {
+            completeIonization(targetEnergy);
+          }
+        };
+
+        const animateElectronReturn = () => {
+          const startTime = performance.now();
+          const startX = dragPosition.x;
+          const startY = dragPosition.y;
+          const endX = dragStartPosition.x;
+          const endY = dragStartPosition.y;
+          const duration = 500;
+
+          const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+            const x = startX + (endX - startX) * easeProgress;
+            const y = startY + (endY - startY) * easeProgress;
+
+            setDragPosition({ x, y });
+            setEnergyValue(energyValue * (1 - easeProgress));
+
+            if (progress < 1) {
+              animationFrameRef.current = requestAnimationFrame(animate);
+            } else {
+              setActiveDragIndex(null);
+              setIsDragging(false);
+              setEnergyValue(0);
+              setCurrentDraggedShell(null);
+            }
+          };
+
+          animationFrameRef.current = requestAnimationFrame(animate);
+        };
+
+        const completeIonization = (actualEnergy) => {
+          if (activeDragIndex === null || !selectedElement) return;
+
+          const [shellIndex, electronIndex] = activeDragIndex
+            .split("-")
+            .map(Number);
+
+          const totalShells =
+            elements[selectedElement].shellConfiguration.length;
+          const shellName = getShellName(shellIndex, totalShells);
+
+          const removedFromShell = ionizationDetails.filter(
+            (detail) =>
+              detail.shell === shellIndex && detail.element === selectedElement
+          ).length;
+
+          const newShellElectronCounts = { ...shellElectronCounts };
+          newShellElectronCounts[shellIndex] =
+            (newShellElectronCounts[shellIndex] || 0) - 1;
+          setShellElectronCounts(newShellElectronCounts);
+
+          setCompletedIonizations([...completedIonizations, activeDragIndex]);
+
+          const newDetail = {
+            electron: activeDragIndex,
+            shell: shellIndex,
+            shellName,
+            electronNumber: electronIndex + 1,
+            removeNumber: removedFromShell + 1,
+            energy: actualEnergy,
+            element: selectedElement,
+          };
+
+          const newIonizationDetails = [...ionizationDetails, newDetail];
+          setIonizationDetails(newIonizationDetails);
+
+          setEnergyValue(actualEnergy);
+
+          const allEnergies = [
+            ...ionizationDetails.map((d) => d.energy),
+            actualEnergy,
+          ];
+          setMaxEnergy(Math.max(...allEnergies) * 1.5);
+
+          setActiveDragIndex(null);
+          setIsDragging(false);
+          setCurrentDraggedShell(null);
+
+          updateElectronPositions();
+        };
+
+        // Effects
+        useEffect(() => {
+          updateElectronPositions();
+        }, [selectedElement, shellElectronCounts, resetKey]);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas || !selectedElement) return;
+
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          const nucleusRadius = 12;
+
+          // Draw nucleus
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, nucleusRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = "#000000";
+          ctx.fill();
+
+          // Draw element symbol in nucleus
+          ctx.fillStyle = "white";
+          ctx.font = "12px Poppins";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(selectedElement, centerX, centerY);
+
+          // Draw electron shells
+          const shellConfig = elements[selectedElement].shellConfiguration;
+          shellConfig.forEach((electronCount, shellIndex) => {
+            const shellRadius = 40 + shellIndex * 25;
+
+            // Draw shell circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, shellRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = "#aaaaaa";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Add electron count
+            const currentCount = shellElectronCounts[shellIndex] || 0;
+            if (currentCount > 0) {
+              ctx.fillStyle = "rgba(0,0,0,0.5)";
+              ctx.font = "8px Poppins";
+              ctx.fillText(
+                `${currentCount}e⁻`,
+                centerX - shellRadius + 8,
+                centerY + 12
+              );
+            }
+          });
+
+          // Draw electrons
+          electrons.forEach((electron) => {
+            if (electron.id === activeDragIndex) return;
+
+            ctx.beginPath();
+            ctx.arc(electron.x, electron.y, electron.radius, 0, 2 * Math.PI);
+            ctx.fillStyle = "#3498db";
+            ctx.fill();
+
+            ctx.fillStyle = "white";
+            ctx.font = "7px Poppins";
+            ctx.fillText("e⁻", electron.x, electron.y);
+          });
+
+          // Draw dragged electron if any
+          if (isDragging && activeDragIndex !== null) {
+            const x = dragPosition.x;
+            const y = dragPosition.y;
+
+            // Draw electron
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = "#000000";
+            ctx.fill();
+
+            // Draw force line
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = "#e74c3c";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw electron label
+            ctx.fillStyle = "white";
+            ctx.font = "7px Poppins";
+            ctx.fillText("e⁻", x, y);
+          }
+        }, [
+          electrons,
+          activeDragIndex,
+          dragPosition,
+          isDragging,
+          shellElectronCounts,
+          selectedElement,
+        ]);
+
+        useEffect(() => {
+          const handleGlobalMouseMove = (event) => {
+            handleMouseMove(event);
+          };
+
+          const handleGlobalMouseUp = () => {
+            handleMouseUp();
+          };
+
+          if (isDragging) {
+            window.addEventListener("mousemove", handleGlobalMouseMove);
+            window.addEventListener("mouseup", handleGlobalMouseUp);
+          }
+
+          return () => {
+            window.removeEventListener("mousemove", handleGlobalMouseMove);
+            window.removeEventListener("mouseup", handleGlobalMouseUp);
+          };
+        }, [isDragging, activeDragIndex, energyValue, dragStartPosition]);
+
+        // Initialize with Sodium
+        useEffect(() => {
+          handleElementSelect("Na");
+        }, []);
+
+        useEffect(() => {
+          return () => {
+            if (animationFrameRef.current) {
+              cancelAnimationFrame(animationFrameRef.current);
+            }
+          };
+        }, []);
+
+        if (!selectedElement) {
+          return React.createElement("div", null, "Loading...");
+        }
+
+        return React.createElement(
+          "div",
+          {
+            style: {
+              fontFamily: "Poppins, sans-serif",
+              fontWeight: 400,
+              padding: "20px",
+              maxWidth: "1400px",
+              margin: "0 auto",
+            },
+          },
+          [
+            React.createElement(
+              "h1",
+              {
+                key: "title",
+                style: {
+                  fontSize: "24px",
+                  fontWeight: "bold",
+                  marginBottom: "10px",
+                },
+              },
+              "Interactive Ionization Energy Simulation"
+            ),
+
+            React.createElement(
+              "p",
+              {
+                key: "description",
+                style: { margin: "0 0 15px 0" },
+              },
+              "Follow the guided lesson to learn about ionization energy and alkali metals. Use the interactive simulation on the right to help answer the questions."
+            ),
+
+            // Video popup
+            videoPopup &&
+              React.createElement(
+                "div",
+                {
+                  key: "video-popup",
+                  className: "video-popup",
+                  onClick: () => setVideoPopup(null),
+                },
+                React.createElement(
+                  "div",
+                  {
+                    className: "video-popup-content",
+                    onClick: (e) => e.stopPropagation(),
+                  },
+                  [
+                    React.createElement(
+                      "button",
+                      {
+                        key: "close-btn",
+                        className: "video-popup-close",
+                        onClick: () => setVideoPopup(null),
+                      },
+                      "×"
+                    ),
+                    React.createElement(
+                      "h3",
+                      {
+                        key: "video-title",
+                        style: { marginBottom: "15px", textAlign: "center" },
+                      },
+                      videoPopup.title
+                    ),
+                    React.createElement("iframe", {
+                      key: "popup-video",
+                      width: "560",
+                      height: "315",
+                      src: videoPopup.url,
+                      title: videoPopup.title,
+                      frameBorder: "0",
+                      allow:
+                        "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+                      referrerPolicy: "strict-origin-when-cross-origin",
+                      allowFullScreen: true,
+                      style: {
+                        borderRadius: "8px",
+                        maxWidth: "100%",
+                        maxHeight: "100%",
+                      },
+                    }),
+                  ]
+                )
+              ),
+
+            // Main content container - side by side layout
+            React.createElement(
+              "div",
+              {
+                key: "main-content",
+                className: "main-content",
+              },
+              [
+                // Guided Mode Slideshow - Left Side
+                React.createElement(
+                  "div",
+                  {
+                    key: "guided-slideshow",
+                    className: "guided-slideshow",
+                  },
+                  [
+                    // Slide progress indicator
+                    React.createElement(
+                      "div",
+                      {
+                        key: "progress",
+                        style: {
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "20px",
+                          paddingBottom: "10px",
+                          borderBottom: "1px solid #dee2e6",
+                          flexWrap: "wrap",
+                          gap: "10px",
+                        },
+                      },
+                      [
+                        React.createElement(
+                          "span",
+                          {
+                            key: "slide-count",
+                            style: {
+                              fontSize: "14px",
+                              color: "#6c757d",
+                              fontWeight: "500",
+                            },
+                          },
+                          `Slide ${currentSlide + 1} of ${slides.length}`
+                        ),
+
+                        React.createElement(
+                          "div",
+                          {
+                            key: "progress-group",
+                            style: {
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "10px",
+                            },
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              {
+                                key: "completion-counter",
+                                style: {
+                                  fontSize: "12px",
+                                  color: "#17a2b8",
+                                  fontWeight: "600",
+                                  backgroundColor: "#d1ecf1",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  border: "1px solid #17a2b8",
+                                },
+                              },
+                              `${getTotalCompletedAnswers().completed}/${
+                                getTotalCompletedAnswers().total
+                              } Completed`
+                            ),
+
+                            React.createElement(
+                              "div",
+                              {
+                                key: "correct-counter",
+                                style: {
+                                  fontSize: "12px",
+                                  color: "#28a745",
+                                  fontWeight: "600",
+                                  backgroundColor: "#d4edda",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px",
+                                  border: "1px solid #28a745",
+                                },
+                              },
+                              `${getTotalCompletedAnswers().correct}/${
+                                getTotalCompletedAnswers().total
+                              } Correct`
+                            ),
+
+                            React.createElement(
+                              "div",
+                              {
+                                key: "progress-bar",
+                                style: {
+                                  width: "150px",
+                                  height: "6px",
+                                  backgroundColor: "#e9ecef",
+                                  borderRadius: "3px",
+                                  overflow: "hidden",
+                                },
+                              },
+                              React.createElement("div", {
+                                style: {
+                                  width: `${
+                                    (getTotalCompletedAnswers().completed /
+                                      getTotalCompletedAnswers().total) *
+                                    100
+                                  }%`,
+                                  height: "100%",
+                                  backgroundColor: "#28a745",
+                                  transition: "width 0.3s ease",
+                                },
+                              })
+                            ),
+                          ]
+                        ),
+                      ]
+                    ),
+
+                    // Slide content
+                    React.createElement(
+                      "div",
+                      {
+                        key: "slide-content",
+                        style: { marginBottom: "20px" },
+                      },
+                      [
+                        React.createElement(
+                          "h2",
+                          {
+                            key: "slide-title",
+                            style: {
+                              fontSize: "18px",
+                              fontWeight: "bold",
+                              marginBottom: "15px",
+                              color: "#2c3e50",
+                            },
+                          },
+                          slides[currentSlide].title
+                        ),
+
+                        React.createElement(
+                          "p",
+                          {
+                            key: "slide-text",
+                            style: {
+                              fontSize: "14px",
+                              lineHeight: "1.6",
+                              marginBottom: "10px",
+                            },
+                          },
+                          slides[currentSlide].content
+                            .split("*")
+                            .map((part, index) => {
+                              if (index % 2 === 1) {
+                                // This part was between asterisks, make it bold and colored
+                                return React.createElement(
+                                  "strong",
+                                  {
+                                    key: index,
+                                    style: {
+                                      color: "#2c3e50",
+                                      fontWeight: "700",
+                                      backgroundColor: "#fff3cd",
+                                      padding: "2px 4px",
+                                      borderRadius: "3px",
+                                    },
+                                  },
+                                  part
+                                );
+                              } else {
+                                // Regular text
+                                return part;
+                              }
+                            })
+                        ),
+
+                        // Definition (for slide 0)
+                        slides[currentSlide].definition &&
+                          React.createElement(
+                            "div",
+                            {
+                              key: "definition",
+                              style: {
+                                backgroundColor: "#e7f3ff",
+                                padding: "15px",
+                                borderRadius: "8px",
+                                margin: "15px 0",
+                                borderLeft: "4px solid #3498db",
+                              },
+                            },
+                            React.createElement(
+                              "span",
+                              {
+                                style: { color: "#2980b9", fontSize: "14px" },
+                              },
+                              slides[currentSlide].definition
+                                .split("*")
+                                .map((part, index) => {
+                                  if (index % 2 === 1) {
+                                    // This part was between asterisks, make it bold and colored
+                                    return React.createElement(
+                                      "strong",
+                                      {
+                                        key: index,
+                                        style: {
+                                          color: "#2c3e50",
+                                          fontWeight: "700",
+                                          backgroundColor: "#fff3cd",
+                                          padding: "2px 4px",
+                                          borderRadius: "3px",
+                                        },
+                                      },
+                                      part
+                                    );
+                                  } else {
+                                    // Regular text
+                                    return part;
+                                  }
+                                })
+                            )
+                          ),
+
+                        // Note (for slide 0)
+                        slides[currentSlide].note &&
+                          React.createElement(
+                            "p",
+                            {
+                              key: "note",
+                              style: {
+                                fontSize: "13px",
+                                fontStyle: "italic",
+                                color: "#e74c3c",
+                                fontWeight: "500",
+                                marginTop: "10px",
+                              },
+                            },
+                            slides[currentSlide].note
+                          ),
+
+                        // Properties list (for slide 3)
+                        slides[currentSlide].properties &&
+                          React.createElement(
+                            "div",
+                            {
+                              key: "properties",
+                              style: { margin: "15px 0" },
+                            },
+                            [
+                              React.createElement(
+                                "p",
+                                {
+                                  key: "properties-intro",
+                                  style: {
+                                    marginBottom: "10px",
+                                    fontWeight: "500",
+                                    fontSize: "14px",
+                                  },
+                                },
+                                "This includes..."
+                              ),
+                              React.createElement(
+                                "ul",
+                                {
+                                  key: "properties-list",
+                                  style: { paddingLeft: "20px" },
+                                },
+                                slides[currentSlide].properties.map(
+                                  (prop, idx) =>
+                                    React.createElement(
+                                      "li",
+                                      {
+                                        key: idx,
+                                        style: {
+                                          marginBottom: "5px",
+                                          fontSize: "13px",
+                                        },
+                                      },
+                                      prop
+                                    )
+                                )
+                              ),
+                            ]
+                          ),
+
+                        // Questions
+                        slides[currentSlide].questions &&
+                          React.createElement(
+                            "div",
+                            {
+                              key: "questions",
+                              style: { marginTop: "20px" },
+                            },
+                            slides[currentSlide].questions.map(
+                              (question, qIdx) => {
+                                const feedback = getQuestionFeedback(
+                                  question.id
+                                );
+                                const userAnswer =
+                                  slideAnswers[question.id] || "";
+                                const attempts =
+                                  attemptCounts[question.id] || 0;
+                                const isSubmitted =
+                                  submittedQuestions[question.id];
+                                const isCorrect =
+                                  userAnswer.trim() &&
+                                  isSubmitted &&
+                                  checkAnswer(question.id, userAnswer);
+
+                                // Determine box styling
+                                let borderColor = "#dee2e6";
+                                let badgeColor = null;
+                                let badgeText = null;
+
+                                if (isCorrect) {
+                                  borderColor = "#28a745";
+                                  badgeColor = "#28a745";
+                                  badgeText = "✓";
+                                } else if (
+                                  isSubmitted ||
+                                  showCorrectAnswers[question.id]
+                                ) {
+                                  borderColor = "#ffc107";
+                                  badgeColor = "#ffc107";
+                                  badgeText = "!";
+                                }
+
+                                return React.createElement(
+                                  "div",
+                                  {
+                                    key: question.id,
+                                    style: {
+                                      marginBottom: "20px",
+                                      padding: "15px",
+                                      backgroundColor: "white",
+                                      borderRadius: "8px",
+                                      border: `2px solid ${borderColor}`,
+                                      position: "relative",
+                                    },
+                                  },
+                                  [
+                                    // Status badge
+                                    badgeColor &&
+                                      React.createElement(
+                                        "div",
+                                        {
+                                          key: "status-badge",
+                                          style: {
+                                            position: "absolute",
+                                            top: "-1px",
+                                            right: "-1px",
+                                            backgroundColor: badgeColor,
+                                            color: "white",
+                                            padding: "3px 6px",
+                                            borderRadius: "0 6px 0 8px",
+                                            fontSize: "11px",
+                                            fontWeight: "bold",
+                                          },
+                                        },
+                                        badgeText
+                                      ),
+
+                                    React.createElement(
+                                      "p",
+                                      {
+                                        key: "question-text",
+                                        style: {
+                                          fontWeight: "500",
+                                          marginBottom: "10px",
+                                          fontSize: "14px",
+                                        },
+                                      },
+                                      question.text
+                                        .split("*")
+                                        .map((part, index) => {
+                                          if (index % 2 === 1) {
+                                            // This part was between asterisks, make it bold and colored
+                                            return React.createElement(
+                                              "strong",
+                                              {
+                                                key: index,
+                                                style: {
+                                                  color: "#2c3e50",
+                                                  fontWeight: "700",
+                                                  backgroundColor: "#fff3cd",
+                                                  padding: "2px 4px",
+                                                  borderRadius: "3px",
+                                                },
+                                              },
+                                              part
+                                            );
+                                          } else {
+                                            // Regular text
+                                            return part;
+                                          }
+                                        })
+                                    ),
+
+                                    React.createElement(
+                                      "div",
+                                      {
+                                        key: "input-container",
+                                        style: {
+                                          display: "flex",
+                                          flexDirection:
+                                            question.type === "multiple_choice"
+                                              ? "column"
+                                              : "row",
+                                          gap: "10px",
+                                          alignItems:
+                                            question.type === "multiple_choice"
+                                              ? "stretch"
+                                              : "flex-start",
+                                        },
+                                      },
+                                      question.type === "multiple_choice"
+                                        ? [
+                                            // Multiple choice options
+                                            React.createElement(
+                                              "div",
+                                              {
+                                                key: "choices",
+                                                style: { marginBottom: "10px" },
+                                              },
+                                              question.choices.map(
+                                                (choice, idx) =>
+                                                  React.createElement(
+                                                    "label",
+                                                    {
+                                                      key: idx,
+                                                      style: {
+                                                        display: "block",
+                                                        marginBottom: "5px",
+                                                        cursor: "pointer",
+                                                        fontSize: "13px",
+                                                      },
+                                                    },
+                                                    [
+                                                      React.createElement(
+                                                        "input",
+                                                        {
+                                                          key: "radio",
+                                                          type: "radio",
+                                                          name: question.id,
+                                                          value: idx + 1,
+                                                          checked:
+                                                            slideAnswers[
+                                                              question.id
+                                                            ] ==
+                                                            idx + 1,
+                                                          onChange: (e) =>
+                                                            setSlideAnswers(
+                                                              (prev) => ({
+                                                                ...prev,
+                                                                [question.id]:
+                                                                  e.target
+                                                                    .value,
+                                                              })
+                                                            ),
+                                                          style: {
+                                                            marginRight: "8px",
+                                                          },
+                                                        }
+                                                      ),
+                                                      choice,
+                                                    ]
+                                                  )
+                                              )
+                                            ),
+
+                                            // Submit button for multiple choice
+                                            React.createElement(
+                                              "button",
+                                              {
+                                                key: "submit-btn-mc",
+                                                onClick: () =>
+                                                  handleAnswerSubmit(
+                                                    question.id
+                                                  ),
+                                                disabled:
+                                                  !slideAnswers[question.id] ||
+                                                  showCorrectAnswers[
+                                                    question.id
+                                                  ],
+                                                style: {
+                                                  padding: "8px 12px",
+                                                  backgroundColor:
+                                                    feedback?.type === "success"
+                                                      ? "#28a745"
+                                                      : "#F2A128",
+                                                  color: "white",
+                                                  border: "none",
+                                                  borderRadius: "4px",
+                                                  cursor:
+                                                    !slideAnswers[
+                                                      question.id
+                                                    ] ||
+                                                    showCorrectAnswers[
+                                                      question.id
+                                                    ]
+                                                      ? "not-allowed"
+                                                      : "pointer",
+                                                  opacity:
+                                                    !slideAnswers[
+                                                      question.id
+                                                    ] ||
+                                                    showCorrectAnswers[
+                                                      question.id
+                                                    ]
+                                                      ? 0.6
+                                                      : 1,
+                                                  fontSize: "12px",
+                                                  alignSelf: "flex-start",
+                                                },
+                                              },
+                                              feedback?.type === "success"
+                                                ? "✓ Correct"
+                                                : "Submit"
+                                            ),
+                                          ]
+                                        : [
+                                            // Regular text area for open questions
+                                            React.createElement("textarea", {
+                                              key: "answer-input",
+                                              value:
+                                                slideAnswers[question.id] || "",
+                                              onChange: (e) =>
+                                                setSlideAnswers((prev) => ({
+                                                  ...prev,
+                                                  [question.id]: e.target.value,
+                                                })),
+                                              placeholder:
+                                                "Type your answer...",
+                                              style: {
+                                                flex: 1,
+                                                padding: "8px",
+                                                border: "1px solid #ced4da",
+                                                borderRadius: "4px",
+                                                resize: "vertical",
+                                                minHeight: "35px",
+                                                fontFamily: "inherit",
+                                                fontSize: "13px",
+                                              },
+                                            }),
+
+                                            React.createElement(
+                                              "button",
+                                              {
+                                                key: "submit-btn",
+                                                onClick: () =>
+                                                  handleAnswerSubmit(
+                                                    question.id
+                                                  ),
+                                                disabled:
+                                                  !slideAnswers[
+                                                    question.id
+                                                  ]?.trim() ||
+                                                  showCorrectAnswers[
+                                                    question.id
+                                                  ],
+                                                style: {
+                                                  padding: "8px 12px",
+                                                  backgroundColor:
+                                                    feedback?.type === "success"
+                                                      ? "#28a745"
+                                                      : "#F2A128",
+                                                  color: "white",
+                                                  border: "none",
+                                                  borderRadius: "4px",
+                                                  cursor:
+                                                    !slideAnswers[
+                                                      question.id
+                                                    ]?.trim() ||
+                                                    showCorrectAnswers[
+                                                      question.id
+                                                    ]
+                                                      ? "not-allowed"
+                                                      : "pointer",
+                                                  opacity:
+                                                    !slideAnswers[
+                                                      question.id
+                                                    ]?.trim() ||
+                                                    showCorrectAnswers[
+                                                      question.id
+                                                    ]
+                                                      ? 0.6
+                                                      : 1,
+                                                  fontSize: "12px",
+                                                },
+                                              },
+                                              feedback?.type === "success"
+                                                ? "✓ Correct"
+                                                : "Submit"
+                                            ),
+                                          ]
+                                    ),
+
+                                    // Feedback
+                                    feedback &&
+                                      React.createElement(
+                                        "div",
+                                        {
+                                          key: "feedback",
+                                          style: {
+                                            marginTop: "10px",
+                                            padding: "8px 12px",
+                                            borderRadius: "4px",
+                                            backgroundColor:
+                                              feedback.type === "success"
+                                                ? "#d4edda"
+                                                : feedback.type === "correct"
+                                                ? "#cce5ff"
+                                                : "#f8d7da",
+                                            color:
+                                              feedback.type === "success"
+                                                ? "#155724"
+                                                : feedback.type === "correct"
+                                                ? "#004085"
+                                                : "#721c24",
+                                            fontSize: "13px",
+                                          },
+                                        },
+                                        feedback.message
+                                      ),
+
+                                    // Rewatch video link (appears after question is completed)
+                                    question.hasVideo &&
+                                      (isCorrect ||
+                                        showCorrectAnswers[question.id]) &&
+                                      React.createElement(
+                                        "div",
+                                        {
+                                          key: "rewatch-container",
+                                          style: {
+                                            marginTop: "10px",
+                                            textAlign: "center",
+                                          },
+                                        },
+                                        React.createElement(
+                                          "button",
+                                          {
+                                            onClick: () =>
+                                              setVideoPopup({
+                                                url: question.videoUrl,
+                                                title: question.videoTitle,
+                                              }),
+                                            style: {
+                                              backgroundColor: "#17a2b8",
+                                              color: "white",
+                                              border: "none",
+                                              borderRadius: "4px",
+                                              padding: "6px 12px",
+                                              fontSize: "12px",
+                                              cursor: "pointer",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: "5px",
+                                              margin: "0 auto",
+                                            },
+                                          },
+                                          [
+                                            React.createElement(
+                                              "span",
+                                              { key: "icon" },
+                                              "🎬"
+                                            ),
+                                            React.createElement(
+                                              "span",
+                                              { key: "text" },
+                                              isCorrect
+                                                ? "Watch the reaction!"
+                                                : "Watch to see the answer!"
+                                            ),
+                                          ]
+                                        )
+                                      ),
+
+                                    // Hyperlink (for slide 3 q2)
+                                    question.hasHyperlink &&
+                                      React.createElement(
+                                        "div",
+                                        {
+                                          key: "hyperlink",
+                                          style: { marginTop: "10px" },
+                                        },
+                                        React.createElement(
+                                          "a",
+                                          {
+                                            href: "#",
+                                            style: {
+                                              color: "#3498db",
+                                              textDecoration: "underline",
+                                              fontSize: "13px",
+                                            },
+                                            onClick: (e) => {
+                                              e.preventDefault();
+                                              alert(
+                                                "Hyperlink to atomic structure image would open here"
+                                              );
+                                            },
+                                          },
+                                          "atomic structures"
+                                        )
+                                      ),
+                                  ]
+                                );
+                              }
+                            )
+                          ),
+
+                        // Info box (for slide 3)
+                        slides[currentSlide].infoBox &&
+                          React.createElement(
+                            "div",
+                            {
+                              key: "info-box",
+                              style: {
+                                backgroundColor: "#fff3cd",
+                                border: "1px solid #ffeaa7",
+                                borderRadius: "8px",
+                                padding: "15px",
+                                marginTop: "20px",
+                              },
+                            },
+                            [
+                              React.createElement(
+                                "p",
+                                {
+                                  key: "info-title",
+                                  style: {
+                                    fontWeight: "600",
+                                    marginBottom: "10px",
+                                    color: "#856404",
+                                    fontSize: "14px",
+                                  },
+                                },
+                                slides[currentSlide].infoBox.title
+                              ),
+                              React.createElement(
+                                "p",
+                                {
+                                  key: "info-content",
+                                  style: {
+                                    fontSize: "13px",
+                                    lineHeight: "1.5",
+                                    color: "#856404",
+                                    margin: "0",
+                                  },
+                                },
+                                slides[currentSlide].infoBox.content
+                              ),
+                            ]
+                          ),
+                      ]
+                    ),
+
+                    // Navigation
+                    React.createElement(
+                      "div",
+                      {
+                        key: "navigation",
+                        style: {
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          paddingTop: "15px",
+                          borderTop: "1px solid #dee2e6",
+                        },
+                      },
+                      [
+                        React.createElement(
+                          "button",
+                          {
+                            key: "prev-btn",
+                            onClick: () =>
+                              setCurrentSlide(Math.max(0, currentSlide - 1)),
+                            disabled: currentSlide === 0,
+                            style: {
+                              padding: "8px 12px",
+                              backgroundColor:
+                                currentSlide === 0 ? "#e9ecef" : "#6c757d",
+                              color: currentSlide === 0 ? "#6c757d" : "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor:
+                                currentSlide === 0 ? "not-allowed" : "pointer",
+                              fontSize: "12px",
+                            },
+                          },
+                          "← Previous"
+                        ),
+
+                        React.createElement(
+                          "button",
+                          {
+                            key: "next-btn",
+                            onClick: () =>
+                              setCurrentSlide(
+                                Math.min(slides.length - 1, currentSlide + 1)
+                              ),
+                            disabled: currentSlide === slides.length - 1,
+                            style: {
+                              padding: "8px 12px",
+                              backgroundColor:
+                                currentSlide === slides.length - 1
+                                  ? "#e9ecef"
+                                  : "#3498db",
+                              color:
+                                currentSlide === slides.length - 1
+                                  ? "#6c757d"
+                                  : "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor:
+                                currentSlide === slides.length - 1
+                                  ? "not-allowed"
+                                  : "pointer",
+                              fontSize: "12px",
+                            },
+                          },
+                          currentSlide === slides.length - 1
+                            ? "Complete"
+                            : "Next →"
+                        ),
+                      ]
+                    ),
+                  ]
+                ),
+
+                // Interactive Simulation Section - Right Side
+                React.createElement(
+                  "div",
+                  {
+                    key: "simulation-section",
+                    className: "simulation-section",
+                  },
+                  [
+                    React.createElement(
+                      "h2",
+                      {
+                        key: "simulation-title",
+                        style: {
+                          fontSize: "18px",
+                          fontWeight: "bold",
+                          marginBottom: "15px",
+                          color: "#2c3e50",
+                        },
+                      },
+                      "Ionization Energy Simulation"
+                    ),
+
+                    // Periodic Table
+                    React.createElement(
+                      "div",
+                      {
+                        key: "periodic-table-section",
+                        className: "periodic-table-container",
+                      },
+                      [
+                        React.createElement(
+                          "h3",
+                          {
+                            key: "table-title",
+                            style: {
+                              fontSize: "16px",
+                              fontWeight: 700,
+                              marginBottom: "15px",
+                              textAlign: "center",
+                              color: "black",
+                              letterSpacing: "1px",
+                            },
+                          },
+                          "Choose an Element"
+                        ),
+                        React.createElement(
+                          "div",
+                          {
+                            key: "table",
+                            className: "periodic-table",
+                          },
+                          createPeriodicTable()
+                        ),
+                        React.createElement(
+                          "div",
+                          {
+                            key: "table-instructions",
+                            style: {
+                              textAlign: "center",
+                              marginTop: "10px",
+                              fontSize: "12px",
+                              color: "rgba(255, 255, 255, 0.9)",
+                              fontStyle: "italic",
+                            },
+                          },
+                          "Click on any element to explore its ionization energy"
+                        ),
+                      ]
+                    ),
+
+                    // Settings toggle
+                    React.createElement(
+                      "div",
+                      {
+                        key: "toggle-container",
+                        style: {
+                          backgroundColor: "#f8f9fa",
+                          padding: "10px",
+                          borderRadius: "6px",
+                          marginBottom: "15px",
+                        },
+                      },
+                      React.createElement(
+                        "label",
+                        {
+                          style: {
+                            display: "flex",
+                            alignItems: "center",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          },
+                        },
+                        [
+                          React.createElement("input", {
+                            key: "checkbox",
+                            type: "checkbox",
+                            checked: allowInnerShellRemoval,
+                            onChange: toggleInnerShellRemoval,
+                            style: { marginRight: "6px" },
+                          }),
+                          "Allow inner shell electron removal",
+                        ]
+                      )
+                    ),
+
+                    // Main simulation area
+                    React.createElement(
+                      "div",
+                      {
+                        key: "simulation-area",
+                        style: {
+                          display: "flex",
+                          gap: "15px",
+                          alignItems: "flex-start",
+                          marginBottom: "15px",
+                        },
+                      },
+                      [
+                        // Atom canvas
+                        React.createElement(
+                          "div",
+                          {
+                            key: "canvas-container",
+                            style: { position: "relative" },
+                          },
+                          [
+                            React.createElement("canvas", {
+                              key: "canvas",
+                              ref: canvasRef,
+                              width: "350",
+                              height: "350",
+                              style: {
+                                border: "1px solid #e0e0e0",
+                                borderRadius: "4px",
+                                backgroundColor: "white",
+                                cursor: "pointer",
+                              },
+                              onMouseDown: handleCanvasMouseDown,
+                            }),
+
+                            // Instructions overlay
+                            React.createElement(
+                              "div",
+                              {
+                                key: "instructions",
+                                style: {
+                                  position: "absolute",
+                                  top: "8px",
+                                  left: "8px",
+                                  backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                  padding: "6px",
+                                  borderRadius: "4px",
+                                  fontSize: "11px",
+                                  maxWidth: "120px",
+                                },
+                              },
+                              "Drag electrons away from the atom"
+                            ),
+                          ]
+                        ),
+
+                        // Energy meter
+                        React.createElement(
+                          "div",
+                          {
+                            key: "energy-meter",
+                            style: {
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                            },
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              {
+                                key: "energy-title",
+                                style: {
+                                  fontSize: "13px",
+                                  fontWeight: "500",
+                                  marginBottom: "8px",
+                                },
+                              },
+                              "Energy"
+                            ),
+
+                            energyValue > 0 &&
+                              React.createElement(
+                                "div",
+                                {
+                                  key: "energy-value",
+                                  style: {
+                                    marginBottom: "8px",
+                                    padding: "4px 6px",
+                                    borderRadius: "4px",
+                                    border: "1px solid #e0e0e0",
+                                    minWidth: "60px",
+                                    textAlign: "center",
+                                    background: currentDraggedShell
+                                      ? `linear-gradient(to right, ${shellColors[currentDraggedShell][0]}, ${shellColors[currentDraggedShell][1]})`
+                                      : "linear-gradient(to right, #ff9800, #ffcc80)",
+                                  },
+                                },
+                                React.createElement(
+                                  "span",
+                                  {
+                                    style: {
+                                      fontSize: "10px",
+                                      fontWeight: "bold",
+                                      color: "white",
+                                    },
+                                  },
+                                  `${Math.round(energyValue)} kJ/mol`
+                                )
+                              ),
+
+                            React.createElement(
+                              "div",
+                              {
+                                key: "energy-meter-bar",
+                                style: {
+                                  width: "50px",
+                                  height: "200px",
+                                  border: "1px solid #e0e0e0",
+                                  borderRadius: "4px",
+                                  background:
+                                    "linear-gradient(to top, #f0f8ff, #fff0f0)",
+                                  position: "relative",
+                                  overflow: "hidden",
+                                },
+                              },
+                              [
+                                React.createElement(
+                                  "div",
+                                  {
+                                    key: "meter-labels",
+                                    style: {
+                                      position: "absolute",
+                                      inset: "0",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      justifyContent: "space-between",
+                                      pointerEvents: "none",
+                                      padding: "4px",
+                                    },
+                                  },
+                                  [
+                                    React.createElement(
+                                      "span",
+                                      {
+                                        key: "high-label",
+                                        style: {
+                                          fontSize: "10px",
+                                          color: "#666",
+                                        },
+                                      },
+                                      "high"
+                                    ),
+                                    React.createElement(
+                                      "span",
+                                      {
+                                        key: "low-label",
+                                        style: {
+                                          fontSize: "10px",
+                                          color: "#666",
+                                        },
+                                      },
+                                      "low"
+                                    ),
+                                  ]
+                                ),
+
+                                React.createElement("div", {
+                                  key: "meter-fill",
+                                  style: {
+                                    position: "absolute",
+                                    bottom: "0",
+                                    left: "0",
+                                    right: "0",
+                                    background: currentDraggedShell
+                                      ? `linear-gradient(to top, ${shellColors[currentDraggedShell][0]}, ${shellColors[currentDraggedShell][1]})`
+                                      : "linear-gradient(to top, #ff9800, #ffcc80)",
+                                    transition: "height 0.1s",
+                                    height: `${getEnergyMeterHeight(
+                                      energyValue
+                                    )}%`,
+                                    maxHeight: "100%",
+                                  },
+                                }),
+                              ]
+                            ),
+                          ]
+                        ),
+                      ]
+                    ),
+
+                    // Reset button
+                    React.createElement(
+                      "div",
+                      {
+                        key: "controls",
+                        style: {
+                          display: "flex",
+                          justifyContent: "center",
+                          marginBottom: "15px",
+                        },
+                      },
+                      React.createElement(
+                        "button",
+                        {
+                          key: "reset-btn",
+                          style: {
+                            padding: "8px 16px",
+                            backgroundColor: "black",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          },
+                          onClick: resetSimulation,
+                        },
+                        "Reset Element"
+                      )
+                    ),
+
+                    // Energy comparison bars
+                    ionizationDetails.length > 0 &&
+                      React.createElement(
+                        "div",
+                        {
+                          key: "energy-comparison",
+                          style: { marginBottom: "15px" },
+                        },
+                        [
+                          React.createElement(
+                            "div",
+                            {
+                              key: "bars-container",
+                              style: {
+                                display: "flex",
+                                gap: "12px",
+                                alignItems: "flex-end",
+                                height: "120px",
+                                justifyContent: "center",
+                                flexWrap: "wrap",
+                                overflowX: "auto",
+                                padding: "10px",
+                              },
+                            },
+                            ionizationDetails.slice(-6).map((detail, idx) => {
+                              const ionizationEnergy = detail.energy;
+                              const shellColor = shellColors[
+                                detail.shellName
+                              ] || ["#9e9e9e", "#bdbdbd"];
+                              const heightPercentage = Math.min(
+                                (ionizationEnergy / maxEnergy) * 100,
+                                100
+                              );
+
+                              return React.createElement(
+                                "div",
+                                {
+                                  key: `ie-${idx}`,
+                                  style: {
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    minWidth: "40px",
+                                  },
+                                },
+                                [
+                                  // Energy value
+                                  React.createElement(
+                                    "div",
+                                    {
+                                      key: "energy-val",
+                                      style: {
+                                        marginBottom: "6px",
+                                        padding: "2px 4px",
+                                        borderRadius: "3px",
+                                        border: "1px solid #e0e0e0",
+                                        textAlign: "center",
+                                        background: `linear-gradient(to right, ${shellColor[0]}, ${shellColor[1]})`,
+                                      },
+                                    },
+                                    React.createElement(
+                                      "span",
+                                      {
+                                        style: {
+                                          fontSize: "9px",
+                                          fontWeight: "bold",
+                                          color: "white",
+                                        },
+                                      },
+                                      `${Math.round(ionizationEnergy)}`
+                                    )
+                                  ),
+
+                                  // Energy bar
+                                  React.createElement(
+                                    "div",
+                                    {
+                                      key: "bar-container",
+                                      style: {
+                                        width: "32px",
+                                        height: "80px",
+                                        border: "1px solid #e0e0e0",
+                                        borderRadius: "3px",
+                                        backgroundColor: "#f9f9f9",
+                                        position: "relative",
+                                        overflow: "hidden",
+                                      },
+                                    },
+                                    React.createElement("div", {
+                                      style: {
+                                        position: "absolute",
+                                        bottom: "0",
+                                        left: "0",
+                                        right: "0",
+                                        background: `linear-gradient(to top, ${shellColor[0]}, ${shellColor[1]})`,
+                                        height: `${heightPercentage}%`,
+                                        maxHeight: "100%",
+                                      },
+                                    })
+                                  ),
+
+                                  // Labels
+                                  React.createElement(
+                                    "div",
+                                    {
+                                      key: "shell-name",
+                                      style: {
+                                        fontSize: "9px",
+                                        fontWeight: "500",
+                                        marginTop: "4px",
+                                        textAlign: "center",
+                                      },
+                                    },
+                                    detail.shellName.split(" ")[0]
+                                  ),
+
+                                  React.createElement(
+                                    "div",
+                                    {
+                                      key: "element-name",
+                                      style: {
+                                        fontSize: "9px",
+                                        fontWeight: "600",
+                                        marginTop: "2px",
+                                        color: "#000000",
+                                        textAlign: "center",
+                                      },
+                                    },
+                                    detail.element
+                                  ),
+                                ]
+                              );
+                            })
+                          ),
+
+                          // Clear button
+                          React.createElement(
+                            "div",
+                            {
+                              key: "clear-container",
+                              style: {
+                                display: "flex",
+                                justifyContent: "center",
+                                marginTop: "10px",
+                              },
+                            },
+                            React.createElement(
+                              "button",
+                              {
+                                key: "clear-all",
+                                style: {
+                                  padding: "6px 12px",
+                                  backgroundColor: "#e74c3c",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  fontSize: "11px",
+                                },
+                                onClick: () => setIonizationDetails([]),
+                              },
+                              "Clear All"
+                            )
+                          ),
+                        ]
+                      ),
+                  ]
+                ),
+              ]
+            ),
+
+            // Details section
+            React.createElement(
+              "div",
+              {
+                key: "ionization-details",
+                style: {
+                  marginTop: "16px",
+                  border: "1px solid #e0e0e0",
+                  borderRadius: "8px",
+                  padding: "20px",
+                  backgroundColor: "#f9f9f9",
+                },
+              },
+              [
+                React.createElement(
+                  "h3",
+                  {
+                    key: "details-title",
+                    style: {
+                      fontSize: "16px",
+                      fontWeight: "bold",
+                      marginBottom: "15px",
+                    },
+                  },
+                  "Ionization Energy Data"
+                ),
+
+                ionizationDetails.length > 0
+                  ? React.createElement(
+                      "div",
+                      {
+                        key: "details-grid",
+                        style: {
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(200px, 1fr))",
+                          gap: "10px",
+                        },
+                      },
+                      ionizationDetails.map((detail, idx) => {
+                        const shellColor = shellColors[detail.shellName] || [
+                          "#9e9e9e",
+                          "#bdbdbd",
+                        ];
+
+                        return React.createElement(
+                          "div",
+                          {
+                            key: `ie-detail-${idx}`,
+                            style: {
+                              padding: "10px",
+                              borderRadius: "6px",
+                              border: `2px solid ${shellColor[0]}`,
+                              backgroundColor: "#f5f5f5",
+                            },
+                          },
+                          [
+                            React.createElement(
+                              "div",
+                              {
+                                key: "element-header",
+                                style: {
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "6px",
+                                },
+                              },
+                              [
+                                React.createElement(
+                                  "span",
+                                  {
+                                    key: "shell-name",
+                                    style: {
+                                      fontWeight: "500",
+                                      fontSize: "14px",
+                                      color: shellColor[0],
+                                    },
+                                  },
+                                  detail.shellName
+                                ),
+
+                                React.createElement(
+                                  "span",
+                                  {
+                                    key: "element-symbol",
+                                    style: {
+                                      fontWeight: "600",
+                                      fontSize: "14px",
+                                      color: "#000000",
+                                      backgroundColor: "rgba(255,255,255,0.8)",
+                                      padding: "3px 8px",
+                                      borderRadius: "4px",
+                                    },
+                                  },
+                                  detail.element
+                                ),
+                              ]
+                            ),
+
+                            React.createElement(
+                              "div",
+                              {
+                                key: "electron-info",
+                                style: {
+                                  fontSize: "13px",
+                                  marginBottom: "4px",
+                                },
+                              },
+                              `Electron #${detail.removeNumber} from shell`
+                            ),
+
+                            React.createElement(
+                              "div",
+                              {
+                                key: "energy-info",
+                                style: {
+                                  fontSize: "14px",
+                                  fontWeight: "600",
+                                  color: shellColor[0],
+                                },
+                              },
+                              `${Math.round(detail.energy)} kJ/mol`
+                            ),
+                          ]
+                        );
+                      })
+                    )
+                  : React.createElement(
+                      "p",
+                      {
+                        key: "no-data",
+                        style: {
+                          fontSize: "14px",
+                          color: "#6c757d",
+                          fontStyle: "italic",
+                          textAlign: "center",
+                        },
+                      },
+                      "No ionization data yet. Start dragging electrons to see their energies!"
+                    ),
+              ]
+            ),
+          ]
+        );
+      }
+
+      // Render the app
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(App));
+    </script>
+  </body>
+</html>
